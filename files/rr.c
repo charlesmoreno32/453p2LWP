@@ -28,17 +28,17 @@
 thread head = NULL;
 
 void rr_admit(thread new_thread){
+	thread curr = head;
 	if(head == NULL){
-		head = &new_thread;
+		head = new_thread;
 		new_thread->sched_one = NULL;
 		new_thread->sched_two = NULL;
 		return;
 	}
-	thread curr = head;
 	while(curr->sched_two != NULL){
 		curr = curr->sched_two;
 	}
-	curr->sched_two = &new_thread;
+	curr->sched_two = new_thread;
 	new_thread->sched_one = curr;
 	new_thread->sched_two = NULL;
 };
@@ -48,7 +48,7 @@ void rr_remove(thread victim){
 		return;
 	}
 	if(victim == head){
-		head = victim->sched_one;
+		head = victim->sched_two;
 	}
 	if(victim->sched_one != NULL){
 		victim->sched_one->sched_two = victim->sched_two;
