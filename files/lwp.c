@@ -36,6 +36,14 @@ struct scheduler rr_publish = {NULL, NULL, rr_admit, rr_remove, rr_next, rr_qlen
 scheduler currScheduler = &rr_publish;
 int NUM_THREADS = 0;
 
+static void lwp_wrap(lwpfun fun, void *arg){
+	// Call the given lwpfunction with the given argument.
+	// Calls lwp_exit() with its return value
+	int rval;
+	rval = fun(arg);
+	lwp_exit(rval);
+};
+
 tid_t lwp_create(lwpfun function, void *argument){
 	// Creates a new thread and admits it to the current scheduler. The thread’s resources will consist of a
 	// context and stack, both initialized so that when the scheduler chooses this thread and its context is
@@ -96,8 +104,8 @@ tid_t lwp_create(lwpfun function, void *argument){
 	new_thread->state.rbp = new_thread->state.rsp;
 
 	// load remaining registers
-	new_thread->state.rdi = (unsigned long *)function;
-	new_thread->state.rsi = (unsigned long *)argument;
+	new_thread->state.rdi = (unsigned long) function;
+	new_thread->state.rsi = (unsigned long) argument;
 	new_thread->state.fxsave = FPU_INIT;
 
 	// set thread status to live
@@ -109,18 +117,16 @@ tid_t lwp_create(lwpfun function, void *argument){
 	return new_thread->tid;
 };
 
-static void lwp_wrap(lwpfun fun, void *arg){
-	// Call the given lwpfunction with the given argument.
-	// Calls lwp_exit() with its return value
-	int rval;
-	rval = fun(arg);
-	lwp_exit(rval);
-};
-
 void lwp_start(void){
 	// Starts the threading system by converting the calling thread—the original system thread—into a LWP
 	// by allocating a context for it and admitting it to the scheduler, and yields control to whichever thread the
 	// scheduler indicates. It is not necessary to allocate a stack for this thread since it already has one.
+	thread original = (thread)malloc(sizeof(struct threadinfo_st));
+	thread currThread  = currScheduler->next();
+
+	NUM_THREADS++;
+	original->tid = NUM_THREADS;
+	original->stack = NULL;
 
 };
 
