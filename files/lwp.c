@@ -100,11 +100,13 @@ tid_t lwp_create(lwpfun function, void *argument){
 	new_thread->state.rsi = (unsigned long *)argument;
 	new_thread->state.fxsave = FPU_INIT;
 
+	// set thread status to live
+	new_thread->status = LWP_LIVE;
+
 	// admit to scheduler
 	//lwp_get_scheduler()->admit(new_thread);
-	swap_rfiles(&new_thread->state, &new_thread->sched_two->state);
 	lwp_get_scheduler()->admit(new_thread);
-	return new_thread;
+	return new_thread->tid;
 };
 
 static void lwp_wrap(lwpfun fun, void *arg){
@@ -125,6 +127,8 @@ void lwp_start(void){
 void lwp_yield(void){
 	// Yields control to the next thread as indicated by the scheduler. If there is no next thread, calls exit(3)
 	// with the termination status of the calling thread (see below).
+
+	//swap_rfiles(&new_thread->state, &new_thread->sched_two->state);
 };
 
 void lwp_exit(int exitval){
