@@ -7,7 +7,10 @@
 #define sysmman_h
 #include <sys/mman.h>
 #endif
+#ifndef unistd_h
+#define unistd_h
 #include <unistd.h>
+#endif
 #ifndef stdio_h
 #define stdio_h
 #include <stdio.h>
@@ -28,13 +31,14 @@
 thread head = NULL;
 
 void rr_admit(thread new_thread){
-	thread curr = head;
+	thread curr;
 	if(head == NULL){
 		head = new_thread;
 		new_thread->sched_one = NULL;
 		new_thread->sched_two = NULL;
 		return;
 	}
+	curr = head;
 	while(curr->sched_two != NULL){
 		curr = curr->sched_two;
 	}
@@ -63,10 +67,11 @@ thread rr_next(void){
 };
 
 int rr_qlen(void){
+	int i;
 	if(head == NULL){
 		return 0;
 	}
-	int i = 1;
+	i = 1;
 	thread curr = head;
 	while(curr->sched_two != NULL){
 		i++;

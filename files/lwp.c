@@ -1,13 +1,36 @@
 #define _GNU_SOURCE
+#ifndef lwp_h
+#define lwp_h
 #include "lwp.h"
+#endif
+#ifndef rr_h
+#define rr_h
 #include "rr.h"
-
+#endif
+#ifndef stddef_h
+#define stddef_h
 #include <stddef.h>
+#endif
+#ifndef sysmman_h
+#define sysmman_h
 #include <sys/mman.h>
+#endif
+#ifndef unistd_h
+#define unistd_h
 #include <unistd.h>
+#endif
+#ifndef stdio_h
+#define stdio_h
 #include <stdio.h>
+#endif
+#ifndef systime_h
+#define systime_h
 #include <sys/time.h>
+#endif
+#ifndef sysresource_h
+#define sysresource_h
 #include <sys/resource.h>
+#endif
 
 struct scheduler rr_publish = {NULL, NULL, rr_admit, rr_remove, rr_next, rr_qlen};
 scheduler currScheduler = &rr_publish;
@@ -17,12 +40,14 @@ tid_t lwp_create(lwpfun function, void *argument){
 	// Creates a new thread and admits it to the current scheduler. The thread’s resources will consist of a
 	// context and stack, both initialized so that when the scheduler chooses this thread and its context is
 	// loaded via swap_rfiles() it will run the given function. This may be called by any thread.
-	NUM_THREADS++;
+	unsigned long *SP, *stack;
 	long page_size = sysconf(_SC_PAGE_SIZE);
 	struct rlimit rlim;
-	size_t howbig;
+	size_t howbig, soft_limit, default_size, stack_size;
 
 	thread new_thread = (thread)malloc(sizeof(struct threadinfo_st));
+
+	NUM_THREADS++;
 
 	// set tid
 	new_thread->tid = NUM_THREADS;
@@ -30,7 +55,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	if (getrlimit(RLIMIT_STACK, &rlim) == 0) {
     	if (rlim.rlim_cur != RLIM_INFINITY) {
         	// Use soft limit for stack size
-        	size_t soft_limit = rlim.rlim_cur;
+        	soft_limit = rlim.rlim_cur;
         	// Check if soft limit is a multiple of the page size
         	if (soft_limit % page_size != 0) {
             // Round up to the nearest multiple of the page size
@@ -39,34 +64,49 @@ tid_t lwp_create(lwpfun function, void *argument){
 			howbig = soft_limit;
     	} else{
 			// RLIMIT_STACK is RLIM_INFINITY
-			size_t default_size = 8 * 1024 * 1024; // 8MB in bytes
+			default_size = 8 * 1024 * 1024; // 8MB in bytes
 			// Round up to the nearest multiple of the page size
-			size_t stack_size = ((default_size / page_size) + 1) * page_size;
+			stack_size = ((default_size / page_size) + 1) * page_size;
 			howbig = stack_size;
 		}
 	} else {
 		// RLIMIT_STACK does not exist
-		size_t default_size = 8 * 1024 * 1024; // 8MB in bytes
+		default_size = 8 * 1024 * 1024; // 8MB in bytes
 		// Round up to the nearest multiple of the page size
-		size_t stack_size = ((default_size / page_size) + 1) * page_size;
+		stack_size = ((default_size / page_size) + 1) * page_size;
 		howbig = stack_size;
 	}
 	new_thread->stacksize = howbig;
 	
 	// allocate stack
-	unsigned long *stack = mmap(NULL, howbig, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
+	stack = mmap(NULL, howbig, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
 	new_thread->stack = stack;
+	// return to beginning of stack
+	SP = new_thread->stack + howbig - sizeof(unsigned long);
+
+	// add lwp_wrap to stack
+	new_thread->stack = (unsigned long)lwp_wrap;
 
 	// load registers
-	new_thread->state.rdi = (unsigned long)argument;
-	new_thread->state.rsi = (unsigned long)function;
-	new_thread->state.rsp = stack;
+	new_thread->state.rdi = (unsigned long *)function;
+	new_thread->state.rsi = (unsigned long *)argument;
+	new_thread->state.fxsave = FPU_INIT;
+
 
 
 	// admit to scheduler
 	//lwp_get_scheduler()->admit(new_thread);
+	swap_rfiles(&new_thread->state, &new_thread->sched_two->state);
 	lwp_get_scheduler()->admit(new_thread);
 	return new_thread;
+};
+
+static void lwp_wrap(lwpfun fun, void *arg){
+	// Call the given lwpfunction with the given argument.
+	// Calls lwp_exit() with its return value
+	int rval;
+	rval = fun(arg);
+	lwp_exit(rval);
 };
 
 void lwp_start(void){
