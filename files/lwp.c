@@ -89,7 +89,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	// allocate stack
 	stack = mmap(NULL, howbig, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
 	original_stack = stack;
-	//go to beginning of stack
+	//go to top of stack
 	stack += howbig;
 	new_thread->stack = stack;
 
@@ -98,7 +98,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 
 	// add lwp_wrap to stack
 	new_thread->state.rsp--;
-	new_thread->stack.rsp = (unsigned long)lwp_wrap;
+	new_thread->state.rsp = (unsigned long)lwp_wrap;
 
 	// set base pointer to lwp_wrap where function is stored
 	new_thread->state.rbp = new_thread->state.rsp;
