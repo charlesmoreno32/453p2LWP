@@ -40,7 +40,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	// Creates a new thread and admits it to the current scheduler. The thread’s resources will consist of a
 	// context and stack, both initialized so that when the scheduler chooses this thread and its context is
 	// loaded via swap_rfiles() it will run the given function. This may be called by any thread.
-	unsigned long *SP, *stack;
+	unsigned long *stack, *original_stack;
 	long page_size = sysconf(_SC_PAGE_SIZE);
 	struct rlimit rlim;
 	size_t howbig, soft_limit, default_size, stack_size;
@@ -80,19 +80,25 @@ tid_t lwp_create(lwpfun function, void *argument){
 	
 	// allocate stack
 	stack = mmap(NULL, howbig, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
+	original_stack = stack;
+	//go to beginning of stack
+	stack += howbig;
 	new_thread->stack = stack;
-	// return to beginning of stack
-	SP = new_thread->stack + howbig - sizeof(unsigned long);
+
+	//set the stack pointer
+	new_thread->state.rsp = stack;
 
 	// add lwp_wrap to stack
+	new_thread->state.rsp--;
 	new_thread->stack = (unsigned long)lwp_wrap;
 
-	// load registers
+	// set base pointer to lwp_wrap where function is stored
+	new_thread->state.rbp = new_thread->state.rsp;
+
+	// load remaining registers
 	new_thread->state.rdi = (unsigned long *)function;
 	new_thread->state.rsi = (unsigned long *)argument;
 	new_thread->state.fxsave = FPU_INIT;
-
-
 
 	// admit to scheduler
 	//lwp_get_scheduler()->admit(new_thread);
@@ -156,5 +162,3 @@ scheduler lwp_get_scheduler(void){
 int main(){
 	return 0;
 }
-
-
