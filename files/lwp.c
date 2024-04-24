@@ -98,7 +98,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 
 	// add lwp_wrap to stack
 	new_thread->state.rsp--;
-	new_thread->stack = (unsigned long)lwp_wrap;
+	new_thread->stack.rsp = (unsigned long)lwp_wrap;
 
 	// set base pointer to lwp_wrap where function is stored
 	new_thread->state.rbp = new_thread->state.rsp;
