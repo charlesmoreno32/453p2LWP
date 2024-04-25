@@ -31,10 +31,16 @@
 #define sysresource_h
 #include <sys/resource.h>
 #endif
+#ifndef stdlib_h
+#define stdlib_h
+#include <stdlib.h>
+#endif
 
 struct scheduler rr_publish = {NULL, NULL, rr_admit, rr_remove, rr_next, rr_qlen};
 scheduler currScheduler = &rr_publish;
 int NUM_THREADS = 0;
+thread currThread = NULL;
+
 
 static void lwp_wrap(lwpfun fun, void *arg){
 	// Call the given lwpfunction with the given argument.
@@ -85,23 +91,30 @@ tid_t lwp_create(lwpfun function, void *argument){
 		howbig = stack_size;
 	}
 	new_thread->stacksize = howbig;
-	
 	// allocate stack
-	stack = mmap(NULL, howbig, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
+	stack = (unsigned long *)mmap(NULL, howbig + 15, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
+
+
 	original_stack = stack;
+	
+	printf("%p\n", (void *)stack);
 	//go to top of stack
-	stack += howbig;
+	stack += howbig - 1;
+	stack = (unsigned long *)(((uintptr_t)stack + 15) & ~(uintptr_t)0x0F);
+
+	printf("%p\n", (void *)stack);
+
 	new_thread->stack = stack;
 
 	//set the stack pointer
-	new_thread->state.rsp = stack;
+	new_thread->state.rsp = (unsigned long)stack;
 
 	// add lwp_wrap to stack
-	new_thread->state.rsp--;
+	new_thread->state.rsp --;
 	new_thread->state.rsp = (unsigned long)lwp_wrap;
 
 	// set base pointer to lwp_wrap where function is stored
-	new_thread->state.rbp = new_thread->state.rsp;
+	new_thread->state.rbp = (unsigned long)stack;
 
 	// load remaining registers
 	new_thread->state.rdi = (unsigned long) function;
@@ -112,7 +125,6 @@ tid_t lwp_create(lwpfun function, void *argument){
 	new_thread->status = LWP_LIVE;
 
 	// admit to scheduler
-	//lwp_get_scheduler()->admit(new_thread);
 	lwp_get_scheduler()->admit(new_thread);
 	return new_thread->tid;
 };
@@ -122,19 +134,41 @@ void lwp_start(void){
 	// by allocating a context for it and admitting it to the scheduler, and yields control to whichever thread the
 	// scheduler indicates. It is not necessary to allocate a stack for this thread since it already has one.
 	thread original = (thread)malloc(sizeof(struct threadinfo_st));
-	thread currThread  = currScheduler->next();
+	//thread currThread  = currScheduler->next();
 
+	// set tid
 	NUM_THREADS++;
 	original->tid = NUM_THREADS;
 	original->stack = NULL;
+	scheduler currentScheduler = lwp_get_scheduler();
+	currentScheduler->admit(original);
 
+	// set current thread
+	currThread = currentScheduler->next();
+	
+	// yield to whatever scheduler decides
+	lwp_yield();
 };
 
 void lwp_yield(void){
 	// Yields control to the next thread as indicated by the scheduler. If there is no next thread, calls exit(3)
 	// with the termination status of the calling thread (see below).
+	
+	// save context of current thread
+	//swap_rfiles(&(currThread->state), NULL);
+	
+	// get next thread
+	thread next_thread = lwp_get_scheduler()->next();
+	
+	// load context of next thread
+	
 
-	//swap_rfiles(&new_thread->state, &new_thread->sched_two->state);
+	//if(next_thread == NULL){
+	//	lwp_exit(currThread->status);
+	//}
+
+	swap_rfiles(&(currThread->state), &(next_thread->state));
+	
 };
 
 void lwp_exit(int exitval){
@@ -149,8 +183,7 @@ tid_t lwp_wait(int *status){
 	// termination status. Returns the tid of the terminated thread or NO_THREAD if it would block forever
 	// because there are no more runnable threads that could terminate.
 	// Be careful not to deallocate the stack of the thread that was the original system thread
-
-	return NO_THREAD;
+	return 1;
 };
 
 tid_t lwp_gettid(void){
@@ -169,6 +202,3 @@ scheduler lwp_get_scheduler(void){
 	return currScheduler;
 };
 
-int main(){
-	return 0;
-}
