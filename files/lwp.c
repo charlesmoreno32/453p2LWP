@@ -204,4 +204,3 @@ void lwp_set_scheduler(scheduler sched){
 scheduler lwp_get_scheduler(void){
 	return currScheduler;
 };
-
