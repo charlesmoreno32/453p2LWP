@@ -96,7 +96,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	//set the stack pointer
 	new_thread->state.rsp = stack;
 
-	// add lwp_wrap to stack
+	// add lwp_wrap to stackgo
 	new_thread->state.rsp--;
 	new_thread->state.rsp = (unsigned long)lwp_wrap;
 
@@ -158,6 +158,9 @@ tid_t lwp_gettid(void){
 }
 
 thread tid2thread(tid_t tid){
+	// returns the thread corresponding to the given thread ID
+	// or NULL if the ID is invalid
+	thread head = 
 	return NULL;
 }
 
