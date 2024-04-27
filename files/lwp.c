@@ -158,7 +158,9 @@ void lwp_yield(void){
 	//swap_rfiles(&(currThread->state), NULL);
 	
 	// get next thread
+	
 	thread next_thread = lwp_get_scheduler()->next();
+	currThread = next_thread;
 	if(next_thread){
 		printf("%d\n", next_thread->tid);
 	} else{

@@ -3,8 +3,6 @@
 typedef struct threadinfo_st *thread;
 typedef struct scheduler *scheduler;
 
-thread head;
-
 void rr_admit(thread new_t);
 
 void rr_remove(thread victim);

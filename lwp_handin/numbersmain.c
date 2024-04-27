@@ -50,10 +50,13 @@ static void indentnum(void *num);
 
 int main(int argc, char *argv[]){
   int x = 1;
+  int y = 3;
+  
   printf("Launching LWPS\n");
 
   /* spawn a number of individual LWPs */
   lwp_create((lwpfun)indentnum, &x);
+  lwp_create((lwpfun)indentnum, &y);  
   lwp_start();
   int status;
   lwp_wait(&status);

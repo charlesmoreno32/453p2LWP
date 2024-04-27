@@ -29,6 +29,7 @@
 #endif
 
 thread head = NULL;
+thread next = NULL;
 
 void rr_admit(thread new_thread){
 	thread curr;
@@ -63,7 +64,17 @@ void rr_remove(thread victim){
 };
 
 thread rr_next(void){
-	return head;
+	if(next == NULL)
+	{
+		return head;
+	} else{
+		next=next->sched_two;
+		if(next == NULL) // looping back around
+		{
+			next == head;
+		}
+	}
+	return next;
 };
 
 int rr_qlen(void){

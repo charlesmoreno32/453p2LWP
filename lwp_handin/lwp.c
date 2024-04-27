@@ -41,7 +41,6 @@ scheduler currScheduler = &rr_publish;
 int NUM_THREADS = 0;
 thread currThread = NULL;
 
-
 void lwp_wrap(lwpfun fun, void *arg){
 	// Call the given lwpfunction with the given argument.
 	// Calls lwp_exit() with its return value
@@ -126,7 +125,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	new_thread->status = LWP_LIVE;
 
 	// admit to scheduler
-	lwp_get_scheduler()->admit(new_thread);
+	currScheduler->admit(new_thread);
 	return new_thread->tid;
 };
 
@@ -141,10 +140,9 @@ void lwp_start(void){
 	NUM_THREADS++;
 	original->tid = NUM_THREADS;
 	original->stack = NULL;
-	scheduler currentScheduler = lwp_get_scheduler();
-	currentScheduler->admit(original);
+	swap_rfiles(&(original->state), NULL);
+	currScheduler->admit(original);
 	// set current thread
-	//currThread = currentScheduler->next();
 	
 	// yield to whatever scheduler decides
 	lwp_yield();
@@ -153,30 +151,31 @@ void lwp_start(void){
 void lwp_yield(void){
 	// Yields control to the next thread as indicated by the scheduler. If there is no next thread, calls exit(3)
 	// with the termination status of the calling thread (see below).
-	
-	// save context of current thread
-	//swap_rfiles(&(currThread->state), NULL);
-	
 	// get next thread
-	thread next_thread = lwp_get_scheduler()->next();
-	if(next_thread){
-		printf("%d\n", next_thread->tid);
-	} else{
-		printf("NULL");
+	thread prevThread = currThread;
+	if((currThread = currScheduler->next()) == NULL){
+		// save status to exit with
+		int status = prevThread->status;
+		// free stack
+		if(prevThread->stack != NULL)
+		{
+			if(munmap(prevThread->stack, prevThread->stacksize) == -1){
+				perror("munmap");
+				exit(EXIT_FAILURE);
+			}
+		}
+		// free thread
+		if(prevThread)
+		{
+			free(prevThread);
+		}
+		// exit with status
+		exit(status);
 	}
-	
-	
-	// load context of next thread
-	
-
-	//if(next_thread == NULL){
-	//	lwp_exit(currThread->status);
-	//}
-
-	if(currThread){
-		swap_rfiles(&(currThread->state), &(next_thread->state));
+	if(prevThread){
+		swap_rfiles(&(prevThread->state), &(currThread->state));	
 	}else{
-		swap_rfiles(NULL, &(next_thread->state));
+		swap_rfiles(NULL, &(currThread->state));
 	}
 };
 
@@ -184,6 +183,13 @@ void lwp_exit(int exitval){
 	// Terminates the calling thread. Its termination status becomes the low 8 bits of the passed integer. The
  	// thread’s resources will be deallocated once it is waited for in lwp_wait(). Yields control to the next
 	// thread using lwp_yield()
+
+	// set last 8 bits to exit + term flag
+	currThread->status = MKTERMSTAT(LWP_TERM, (exitval & 0xFF));
+	// remove from scheduler
+	currScheduler->remove(currThread);
+	// prob should add to a termination queue
+
 	lwp_yield();
 };
 
@@ -203,7 +209,15 @@ tid_t lwp_gettid(void){
 thread tid2thread(tid_t tid){
 	// returns the thread corresponding to the given thread ID
 	// or NULL if the ID is invalid
-	//thread head = 
+	
+	thread curr = currScheduler->next();
+	while(curr->sched_two != NULL){
+		if(curr->tid == tid)
+		{
+			return curr;
+		}
+		curr = curr->sched_two;
+	}
 	return NULL;
 }
 
