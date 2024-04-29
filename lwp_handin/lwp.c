@@ -150,6 +150,11 @@ void lwp_start(void){
 	// Starts the threading system by converting the calling thread—the original system thread—into a LWP
 	// by allocating a context for it and admitting it to the scheduler, and yields control to whichever thread the
 	// scheduler indicates. It is not necessary to allocate a stack for this thread since it already has one.
+	if(currScheduler->qlen <= 0)
+	{
+		return;
+	}
+
 	thread original = (thread)malloc(sizeof(struct threadinfo_st));
 	//thread currThread  = currScheduler->next();
 
@@ -157,10 +162,10 @@ void lwp_start(void){
 	NUM_THREADS++;
 	original->tid = NUM_THREADS;
 	original->stack = NULL;
-	swap_rfiles(&(original->state), NULL);
+	
 	currScheduler->admit(original);
 	// set current thread
-	
+	currThread = original;
 	// yield to whatever scheduler decides
 	lwp_yield();
 };
@@ -198,11 +203,13 @@ void lwp_exit(int exitval){
 		terminatedQueue = currThread;
 	} else {
 		thread curr = terminatedQueue;
-		while(curr != NULL)
+		while(curr->lib_two != NULL)
 		{
 			curr = curr->lib_two;
 		}
-		curr->lib_one->lib_two = curr;
+		if(curr->lib_one){
+			curr->lib_one->lib_two = curr;
+		}
 		curr->lib_two = NULL;
 	}
 
@@ -233,15 +240,19 @@ tid_t lwp_wait(int *status){
 	{
 		// remove head (oldest) from terminated threads queue
 		thread term = terminatedQueue;
-		terminatedQueue->lib_two->lib_one = NULL;
-		terminatedQueue = terminatedQueue->lib_two;
+		if(term != NULL)
+		{
+			terminatedQueue->lib_two->lib_one = NULL;
+			terminatedQueue = terminatedQueue->lib_two;
+		}
+		
 		if (status != NULL)
 		{
 			*status = term->status;
 		}
 		tid_t t = term->tid;
 		// deallocate the thread and return status
-		deallocateThread(term);
+		//deallocateThread(term);
 		return t;
 	}
 
@@ -253,12 +264,14 @@ tid_t lwp_wait(int *status){
 		waitingQueue = currThread;
 	} else {
 		thread temp = waitingQueue;
-			while(temp != NULL)
+			while(temp->lib_two != NULL)
 			{
 				temp = temp->lib_two;
 			}
-			temp->lib_one->lib_two = temp;
-			temp->lib_two = NULL;
+			temp->lib_two = currThread;
+			currThread->lib_one = temp;
+			currThread->lib_two = NULL;
+			
 	}
 	// move on to next thread
 	lwp_yield();
@@ -266,27 +279,31 @@ tid_t lwp_wait(int *status){
 	thread terminated = currThread->exited;
 	// remove terminated from terminated queue
 	thread temp = terminatedQueue;
-	if(terminated == temp){
-		terminatedQueue = temp->lib_one;
-	}
-	while(temp != NULL) {
-		temp = temp->lib_two;
-		if(temp == terminatedQueue){
-			temp->lib_one->lib_two = temp->lib_two;
-			temp->lib_two->lib_two = temp->lib_one;
-			break;
+	if(temp != NULL){
+		if(terminated == temp){
+			terminatedQueue = temp->lib_two;
+			terminatedQueue->lib_one = NULL;
+		}
+		while(temp->lib_two != NULL) {
+			temp = temp->lib_two;
+			if(temp == terminated){
+				temp->lib_one->lib_two = temp->lib_two;
+				temp->lib_two->lib_one = temp->lib_one;
+				break;
+			}
 		}
 	}
 	// remove current thread from waiting queue
 	thread temp2 = waitingQueue;
 	if(currThread == temp2){
 		waitingQueue = temp2->lib_one;
+		waitingQueue->lib_one = NULL;
 	}
-	while(temp2 != NULL) {
+	while(temp2->lib_two != NULL) {
 		temp2 = temp2->lib_two;
 		if(temp2 == waitingQueue){
 			temp2->lib_one->lib_two = temp2->lib_two;
-			temp2->lib_two->lib_two = temp2->lib_one;
+			temp2->lib_two->lib_one = temp2->lib_one;
 			break;
 		}
 	}
@@ -325,7 +342,40 @@ thread tid2thread(tid_t tid){
 }
 
 void lwp_set_scheduler(scheduler sched){
-	currScheduler = sched;
+	thread saved;
+    thread new_head;
+    scheduler new_sched = sched;
+
+    if (!new_sched)
+    {
+        if (currScheduler == &rr_publish)
+        {
+            return;
+        }
+        new_sched = &rr_publish;
+    }
+
+    if (new_sched->init)
+    {
+        new_sched->init();
+    }
+
+    new_head = currThread;
+
+    while ((currThread = currScheduler->next()))
+    {
+        saved = currThread;
+        currScheduler->remove(saved);
+        new_sched->admit(saved);
+    }
+
+    if (currScheduler->shutdown)
+    {
+        currScheduler->shutdown();
+    }
+    
+    currThread = new_head;
+    currScheduler = new_sched;
 };
 
 scheduler lwp_get_scheduler(void){

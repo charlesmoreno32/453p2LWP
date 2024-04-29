@@ -71,7 +71,7 @@ thread rr_next(void){
 		next=next->sched_two;
 		if(next == NULL) // looping back around
 		{
-			next == head;
+			next = head;
 		}
 	}
 	return next;
