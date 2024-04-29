@@ -40,6 +40,23 @@ struct scheduler rr_publish = {NULL, NULL, rr_admit, rr_remove, rr_next, rr_qlen
 scheduler currScheduler = &rr_publish;
 int NUM_THREADS = 0;
 thread currThread = NULL;
+thread terminatedQueue = NULL; 
+thread waitingQueue = NULL;
+void deallocateThread(thread t){
+	// free stack
+	if(t->stack != NULL)
+	{
+		if(munmap(t->stack, t->stacksize) == -1){
+			perror("munmap");
+			exit(EXIT_FAILURE);
+		}
+	}
+	// free thread
+	if(t)
+	{
+		free(t);
+	}
+}
 
 void lwp_wrap(lwpfun fun, void *arg){
 	// Call the given lwpfunction with the given argument.
@@ -156,19 +173,7 @@ void lwp_yield(void){
 	if((currThread = currScheduler->next()) == NULL){
 		// save status to exit with
 		int status = prevThread->status;
-		// free stack
-		if(prevThread->stack != NULL)
-		{
-			if(munmap(prevThread->stack, prevThread->stacksize) == -1){
-				perror("munmap");
-				exit(EXIT_FAILURE);
-			}
-		}
-		// free thread
-		if(prevThread)
-		{
-			free(prevThread);
-		}
+		deallocateThread(prevThread);
 		// exit with status
 		exit(status);
 	}
@@ -188,8 +193,26 @@ void lwp_exit(int exitval){
 	currThread->status = MKTERMSTAT(LWP_TERM, (exitval & 0xFF));
 	// remove from scheduler
 	currScheduler->remove(currThread);
-	// prob should add to a termination queue
+	// add to termination queue
+	if(terminatedQueue == NULL) {
+		terminatedQueue = currThread;
+	} else {
+		thread curr = terminatedQueue;
+		while(curr != NULL)
+		{
+			curr = curr->lib_two;
+		}
+		curr->lib_one->lib_two = curr;
+		curr->lib_two = NULL;
+	}
 
+	// check if there are threads in waiting queue
+	if(waitingQueue != NULL)
+	{
+		waitingQueue->exited = terminatedQueue;
+		// readmit to scheduler
+		currScheduler->admit(waitingQueue);
+	}
 	lwp_yield();
 };
 
@@ -199,11 +222,91 @@ tid_t lwp_wait(int *status){
 	// termination status. Returns the tid of the terminated thread or NO_THREAD if it would block forever
 	// because there are no more runnable threads that could terminate.
 	// Be careful not to deallocate the stack of the thread that was the original system thread
-	return 1;
+
+	if (currScheduler->qlen() <= 1)
+    {
+        return NO_THREAD;
+    }
+
+	// check if there are terminated threads
+	if(terminatedQueue != NULL)
+	{
+		// remove head (oldest) from terminated threads queue
+		thread term = terminatedQueue;
+		terminatedQueue->lib_two->lib_one = NULL;
+		terminatedQueue = terminatedQueue->lib_two;
+		if (status != NULL)
+		{
+			*status = term->status;
+		}
+		tid_t t = term->tid;
+		// deallocate the thread and return status
+		deallocateThread(term);
+		return t;
+	}
+
+	// no terminated threads, and therefore calling thread should block
+	// remove from scheduler
+	currScheduler->remove(currThread);
+	// add to waiting queue
+	if(waitingQueue == NULL) {
+		waitingQueue = currThread;
+	} else {
+		thread temp = waitingQueue;
+			while(temp != NULL)
+			{
+				temp = temp->lib_two;
+			}
+			temp->lib_one->lib_two = temp;
+			temp->lib_two = NULL;
+	}
+	// move on to next thread
+	lwp_yield();
+	// retrieve exited
+	thread terminated = currThread->exited;
+	// remove terminated from terminated queue
+	thread temp = terminatedQueue;
+	if(terminated == temp){
+		terminatedQueue = temp->lib_one;
+	}
+	while(temp != NULL) {
+		temp = temp->lib_two;
+		if(temp == terminatedQueue){
+			temp->lib_one->lib_two = temp->lib_two;
+			temp->lib_two->lib_two = temp->lib_one;
+			break;
+		}
+	}
+	// remove current thread from waiting queue
+	thread temp2 = waitingQueue;
+	if(currThread == temp2){
+		waitingQueue = temp2->lib_one;
+	}
+	while(temp2 != NULL) {
+		temp2 = temp2->lib_two;
+		if(temp2 == waitingQueue){
+			temp2->lib_one->lib_two = temp2->lib_two;
+			temp2->lib_two->lib_two = temp2->lib_one;
+			break;
+		}
+	}
+	if (terminated != NULL)
+    {
+        if (status != NULL)
+        {
+            *status = terminated->status;
+        }
+
+        tid_t t = terminated->tid;
+        deallocateThread(terminated);
+        return t;
+    }
 };
 
 tid_t lwp_gettid(void){
-	return NO_THREAD;
+	if(currThread){
+		return currThread->tid;
+	} return NO_THREAD;
 }
 
 thread tid2thread(tid_t tid){
