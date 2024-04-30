@@ -46,7 +46,6 @@ void deallocateThread(thread t){
 	// free stack
 	if(t->stack)
 	{
-		//munmap(t->stack, (t->stacksize *  sizeof(unsigned long)));
 		free(t->stack);
 	}
 	// free thread
@@ -70,10 +69,11 @@ tid_t lwp_create(lwpfun function, void *argument){
 	// loaded via swap_rfiles() it will run the given function. This may be called by any thread.
 	long page_size = sysconf(_SC_PAGE_SIZE);
 	struct rlimit rlim;
-	size_t soft_limit, default_size, stack_size;
+	size_t soft_limit = 0, default_size = 0, stack_size = 0;
 	ssize_t howbig = 0;
-	thread new_thread = (thread)malloc(sizeof(struct threadinfo_st));
+	thread new_thread = NULL;
 	unsigned long *SP;
+	new_thread = (thread)malloc(sizeof(struct threadinfo_st));
 
 	NUM_THREADS++;
 
@@ -106,7 +106,6 @@ tid_t lwp_create(lwpfun function, void *argument){
 	}
 	
 	// allocate stack
-	//new_thread->stack = (unsigned long *)mmap(NULL, (howbig * sizeof(unsigned long)), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
 	new_thread->stack = (unsigned long *)malloc(howbig * sizeof(unsigned long));
 	new_thread->stacksize = howbig;
 
@@ -139,7 +138,7 @@ void lwp_start(void){
 	// Starts the threading system by converting the calling thread—the original system thread—into a LWP
 	// by allocating a context for it and admitting it to the scheduler, and yields control to whichever thread the
 	// scheduler indicates. It is not necessary to allocate a stack for this thread since it already has one.
-	thread original;
+	thread original = NULL;
 	original = (thread)malloc(sizeof(struct threadinfo_st));
 
 	// set tid
@@ -159,10 +158,11 @@ void lwp_yield(void){
 	// with the termination status of the calling thread (see below).
 	// get next thread
 	thread prevThread = currThread;
+	unsigned int status;
 	if((currThread = currScheduler->next()) == NULL){
+		status = prevThread->status;
 		deallocateThread(prevThread);
-		// exit with status
-		exit(prevThread->status);
+		exit(status);
 	}
 	if(prevThread){
 		swap_rfiles(&(prevThread->state), &(currThread->state));	
@@ -175,7 +175,7 @@ void lwp_exit(int exitval){
 	// Terminates the calling thread. Its termination status becomes the low 8 bits of the passed integer. The
  	// thread’s resources will be deallocated once it is waited for in lwp_wait(). Yields control to the next
 	// thread using lwp_yield()
-	thread curr;
+	thread curr = NULL;
 	// set last 8 bits to exit + term flag
 	currThread->status = MKTERMSTAT(LWP_TERM, (exitval & 0xFF));
 	// remove from scheduler
@@ -211,8 +211,8 @@ tid_t lwp_wait(int *status){
 	// termination status. Returns the tid of the terminated thread or NO_THREAD if it would block forever
 	// because there are no more runnable threads that could terminate.
 	// Be careful not to deallocate the stack of the thread that was the original system thread
-	tid_t tid;
-	thread term, temp, terminated, temp2;
+	tid_t tid = 0;
+	thread term = NULL, temp = NULL, terminated = NULL, temp2 = NULL;
 
 	if (currScheduler->qlen() <= 1)
     {
@@ -248,13 +248,12 @@ tid_t lwp_wait(int *status){
 		waitingQueue = currThread;
 	} else {
 		temp = waitingQueue;
-			while(temp->lib_two != NULL)
-			{
-				temp = temp->lib_two;
-			}
-			temp->lib_two = currThread;
-			currThread->lib_one = temp;
-			currThread->lib_two = NULL;
+		while(temp->lib_two != NULL){
+			temp = temp->lib_two;
+		}
+		temp->lib_two = currThread;
+		currThread->lib_one = temp;
+		currThread->lib_two = NULL;
 			
 	}
 	// move on to next thread
@@ -295,14 +294,11 @@ tid_t lwp_wait(int *status){
 			break;
 		}
 	}
-	if (terminated != NULL)
-    {
-        if (status != NULL)
-        {
+	if (terminated != NULL) {
+        if (status != NULL) {
             *status = terminated->status;
         }
-
-        tid = terminated->tid;
+		tid = terminated->tid;
         deallocateThread(terminated);
         return tid;
     }
@@ -311,7 +307,8 @@ tid_t lwp_wait(int *status){
 tid_t lwp_gettid(void){
 	if(currThread){
 		return currThread->tid;
-	} return NO_THREAD;
+	}
+	return NO_THREAD;
 }
 
 thread tid2thread(tid_t tid){
@@ -335,11 +332,12 @@ thread tid2thread(tid_t tid){
 			curr = curr->sched_two;
 		}
 	}
-	return NULL;
+	curr = tidTothread(tid);
+	return curr;
 }
 
 void lwp_set_scheduler(scheduler sched){
-	thread head;
+	thread head = NULL;
 	if(!sched){
 		sched = &rr_publish;
 	}

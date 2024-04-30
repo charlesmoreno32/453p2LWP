@@ -31,6 +31,20 @@
 thread head = NULL;
 thread curr = NULL;
 
+thread tidTothread(tid_t tid){
+	thread temp = head;
+	if(!head){
+		return NULL;
+	}
+	while(temp->sched_two){
+		if(temp->tid == tid){
+			return temp;
+		}
+		temp = temp->sched_two;
+	}
+	return NULL;
+}
+
 void rr_admit(thread new_thread){
 	thread temp;
 	if(!head){
