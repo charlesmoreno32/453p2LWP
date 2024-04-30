@@ -44,9 +44,10 @@ thread terminatedQueue = NULL;
 thread waitingQueue = NULL;
 void deallocateThread(thread t){
 	// free stack
-	if(t->stack != NULL)
+	if(t->stack)
 	{
-		munmap(t->stack, t->stacksize);
+		//munmap(t->stack, (t->stacksize *  sizeof(unsigned long)));
+		free(t->stack);
 	}
 	// free thread
 	if(t)
@@ -105,7 +106,8 @@ tid_t lwp_create(lwpfun function, void *argument){
 	}
 	
 	// allocate stack
-	new_thread->stack = (unsigned long *)mmap(NULL, (howbig * sizeof(unsigned long)), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
+	//new_thread->stack = (unsigned long *)mmap(NULL, (howbig * sizeof(unsigned long)), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
+	new_thread->stack = (unsigned long *)malloc(howbig * sizeof(unsigned long));
 	new_thread->stacksize = howbig;
 
 	// load registers
@@ -173,7 +175,7 @@ void lwp_exit(int exitval){
 	// Terminates the calling thread. Its termination status becomes the low 8 bits of the passed integer. The
  	// thread’s resources will be deallocated once it is waited for in lwp_wait(). Yields control to the next
 	// thread using lwp_yield()
-
+	thread curr;
 	// set last 8 bits to exit + term flag
 	currThread->status = MKTERMSTAT(LWP_TERM, (exitval & 0xFF));
 	// remove from scheduler
@@ -182,7 +184,7 @@ void lwp_exit(int exitval){
 	if(terminatedQueue == NULL) {
 		terminatedQueue = currThread;
 	} else {
-		thread curr = terminatedQueue;
+		curr = terminatedQueue;
 		while(curr->lib_two != NULL)
 		{
 			curr = curr->lib_two;
@@ -285,7 +287,7 @@ tid_t lwp_wait(int *status){
 			waitingQueue->lib_one = NULL;
 		}
 	}
-	while(temp2->lib_two) {
+	while(temp2->lib_two != NULL) {
 		temp2 = temp2->lib_two;
 		if(temp2 == waitingQueue){
 			temp2->lib_one->lib_two = temp2->lib_two;
@@ -300,7 +302,7 @@ tid_t lwp_wait(int *status){
             *status = terminated->status;
         }
 
-        tid= terminated->tid;
+        tid = terminated->tid;
         deallocateThread(terminated);
         return tid;
     }
@@ -316,24 +318,22 @@ thread tid2thread(tid_t tid){
 	// returns the thread corresponding to the given thread ID
 	// or NULL if the ID is invalid
 	thread curr = terminatedQueue;
-	if(!curr){
-		return NULL;
-	}
-	while(curr->sched_two != NULL){
-		if(curr->tid == tid) {
-			return curr;
+	if(curr){
+		while(curr->sched_two != NULL){
+			if(curr->tid == tid) {
+				return curr;
+			}
+			curr = curr->sched_two;
 		}
-		curr = curr->sched_two;
 	}
 	curr = waitingQueue;
-	if(!curr){
-		return NULL;
-	}
-	while(curr->sched_two != NULL){
-		if(curr->tid == tid) {
-			return curr;
+	if(curr){
+		while(curr->sched_two != NULL){
+			if(curr->tid == tid) {
+				return curr;
+			}
+			curr = curr->sched_two;
 		}
-		curr = curr->sched_two;
 	}
 	return NULL;
 }
