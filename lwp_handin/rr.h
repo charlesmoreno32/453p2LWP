@@ -1,5 +1,5 @@
-#include <stdio.h>
-
+#ifndef rr_h
+#define rr_h
 thread tidTothread(tid_t tid);
 
 void rr_admit(thread new_t);
@@ -11,3 +11,5 @@ thread rr_next(void);
 int rr_qlen(void);
 
 extern struct scheduler rr_publish;
+
+#endif
