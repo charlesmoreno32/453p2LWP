@@ -285,7 +285,7 @@ tid_t lwp_wait(int *status){
 			waitingQueue->lib_one = NULL;
 		}
 	}
-	while(temp2->lib_two != NULL) {
+	while(temp2->lib_two) {
 		temp2 = temp2->lib_two;
 		if(temp2 == waitingQueue){
 			temp2->lib_one->lib_two = temp2->lib_two;
@@ -315,11 +315,22 @@ tid_t lwp_gettid(void){
 thread tid2thread(tid_t tid){
 	// returns the thread corresponding to the given thread ID
 	// or NULL if the ID is invalid
-	
-	thread curr = currScheduler->next();
+	thread curr = terminatedQueue;
+	if(!curr){
+		return NULL;
+	}
 	while(curr->sched_two != NULL){
-		if(curr->tid == tid)
-		{
+		if(curr->tid == tid) {
+			return curr;
+		}
+		curr = curr->sched_two;
+	}
+	curr = waitingQueue;
+	if(!curr){
+		return NULL;
+	}
+	while(curr->sched_two != NULL){
+		if(curr->tid == tid) {
 			return curr;
 		}
 		curr = curr->sched_two;
