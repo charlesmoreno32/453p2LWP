@@ -75,6 +75,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	size_t soft_limit, default_size, stack_size;
 	ssize_t howbig = 0;
 	thread new_thread = (thread)malloc(sizeof(struct threadinfo_st));
+	unsigned long *SP;
 
 	NUM_THREADS++;
 
@@ -108,35 +109,25 @@ tid_t lwp_create(lwpfun function, void *argument){
 	
 	// allocate stack
 	new_thread->stack = (unsigned long *)mmap(NULL, (howbig * sizeof(unsigned long)), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0 );
-	
 	new_thread->stacksize = howbig;
-	unsigned long *stack_pointer;
-	unsigned long *base_pointer;
 
-	// load remaining registers
+	// load registers
 	new_thread->state.rdi = (unsigned long) function;
 	new_thread->state.rsi = (unsigned long) argument;
 	new_thread->state.fxsave = FPU_INIT;
 
 	//go to top of stack
-	stack_pointer = (new_thread->stack + new_thread->stacksize-1);
-	stack_pointer = (unsigned long*)(((uintptr_t)stack_pointer + 15) & ~0xF);
-	base_pointer = stack_pointer;
-
-	//set the stack pointer
+	SP = (new_thread->stack + new_thread->stacksize-1);
+	SP = (unsigned long*)(((uintptr_t)SP + 15) & ~0xF);
 	
-	stack_pointer--;
-	*stack_pointer = (unsigned long)lwp_exit;
 	// add lwp_wrap to stack
-	stack_pointer--;
-    *stack_pointer = (unsigned long)lwp_wrap;
+	SP--;
+    *SP = (unsigned long)lwp_wrap;
+	SP--;
 	
-	stack_pointer--;
-    *stack_pointer = (unsigned long)base_pointer;
-	
-	// set base pointer to lwp_wrap where function is stored
-	new_thread->state.rbp = (unsigned long)(stack_pointer);
-	new_thread->state.rsp = (unsigned long)(stack_pointer);
+	// set base pointer to lwp_wrap where function is stored and stack pointer
+	new_thread->state.rbp = (unsigned long)(SP);
+	new_thread->state.rsp = (unsigned long)(SP);
 
 	// set thread status to live
 	new_thread->status = LWP_LIVE;
@@ -208,9 +199,9 @@ void lwp_exit(int exitval){
 			curr = curr->lib_two;
 		}
 		if(curr->lib_one){
-			curr->lib_one->lib_two = curr;
+			curr->lib_one->lib_two = currThread;
 		}
-		curr->lib_two = NULL;
+		currThread->lib_two = NULL;
 	}
 
 	// check if there are threads in waiting queue
@@ -282,7 +273,9 @@ tid_t lwp_wait(int *status){
 	if(temp != NULL){
 		if(terminated == temp){
 			terminatedQueue = temp->lib_two;
-			terminatedQueue->lib_one = NULL;
+			if(terminatedQueue != NULL){
+				terminatedQueue->lib_one = NULL;
+			}
 		}
 		while(temp->lib_two != NULL) {
 			temp = temp->lib_two;
@@ -297,7 +290,9 @@ tid_t lwp_wait(int *status){
 	thread temp2 = waitingQueue;
 	if(currThread == temp2){
 		waitingQueue = temp2->lib_one;
-		waitingQueue->lib_one = NULL;
+		if(waitingQueue != NULL){
+			waitingQueue->lib_one = NULL;
+		}
 	}
 	while(temp2->lib_two != NULL) {
 		temp2 = temp2->lib_two;

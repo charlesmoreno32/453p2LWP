@@ -29,27 +29,27 @@
 #endif
 
 thread head = NULL;
-thread next = NULL;
+thread curr = NULL;
 
 void rr_admit(thread new_thread){
-	thread curr;
+	thread temp;
 	if(head == NULL){
 		head = new_thread;
 		new_thread->sched_one = NULL;
 		new_thread->sched_two = NULL;
 		return;
 	}
-	curr = head;
-	while(curr->sched_two != NULL){
-		curr = curr->sched_two;
+	temp = head;
+	while(temp->sched_two != NULL){
+		temp = temp->sched_two;
 	}
-	curr->sched_two = new_thread;
-	new_thread->sched_one = curr;
+	temp->sched_two = new_thread;
+	new_thread->sched_one = temp;
 	new_thread->sched_two = NULL;
 };
 
 void rr_remove(thread victim){
-	if(head == NULL) {
+	if(head == NULL || victim == NULL) {
 		return;
 	}
 	if(victim == head){
@@ -64,17 +64,16 @@ void rr_remove(thread victim){
 };
 
 thread rr_next(void){
-	if(next == NULL)
-	{
-		return head;
+	if(curr == NULL){
+		curr = head;
 	} else{
-		next=next->sched_two;
-		if(next == NULL) // looping back around
+		curr = curr->sched_two;
+		if(curr == NULL) // looping back around
 		{
-			next = head;
+			curr = head;
 		}
 	}
-	return next;
+	return curr;
 };
 
 int rr_qlen(void){
@@ -83,10 +82,10 @@ int rr_qlen(void){
 		return 0;
 	}
 	i = 1;
-	thread curr = head;
-	while(curr->sched_two != NULL){
+	thread temp = head;
+	while(temp->sched_two != NULL){
 		i++;
-		curr = curr->sched_two;
+		temp = temp->sched_two;
 	}
 	return i;
 };
