@@ -33,14 +33,14 @@ thread curr = NULL;
 
 void rr_admit(thread new_thread){
 	thread temp;
-	if(head == NULL){
+	if(!head){
 		head = new_thread;
 		new_thread->sched_one = NULL;
 		new_thread->sched_two = NULL;
 		return;
 	}
 	temp = head;
-	while(temp->sched_two != NULL){
+	while(temp->sched_two){
 		temp = temp->sched_two;
 	}
 	temp->sched_two = new_thread;
@@ -49,7 +49,7 @@ void rr_admit(thread new_thread){
 };
 
 void rr_remove(thread victim){
-	if(head == NULL || victim == NULL) {
+	if(!head) {
 		return;
 	}
 	if(victim == head){
@@ -64,26 +64,23 @@ void rr_remove(thread victim){
 };
 
 thread rr_next(void){
-	if(curr == NULL){
-		curr = head;
-	} else{
+	if(curr){
 		curr = curr->sched_two;
-		if(curr == NULL) // looping back around
-		{
-			curr = head;
-		}
+	}
+	if(!curr){
+		curr = head;
 	}
 	return curr;
 };
 
 int rr_qlen(void){
 	int i;
-	if(head == NULL){
+	if(!head){
 		return 0;
 	}
 	i = 1;
 	thread temp = head;
-	while(temp->sched_two != NULL){
+	while(temp->sched_two){
 		i++;
 		temp = temp->sched_two;
 	}
