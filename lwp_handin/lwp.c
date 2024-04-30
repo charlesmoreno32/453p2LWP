@@ -46,10 +46,7 @@ void deallocateThread(thread t){
 	// free stack
 	if(t->stack != NULL)
 	{
-		if(munmap(t->stack, t->stacksize) == -1){
-			perror("munmap");
-			exit(EXIT_FAILURE);
-		}
+		munmap(t->stack, t->stacksize);
 	}
 	// free thread
 	if(t)
@@ -117,8 +114,7 @@ tid_t lwp_create(lwpfun function, void *argument){
 	new_thread->state.fxsave = FPU_INIT;
 
 	//go to top of stack
-	SP = (new_thread->stack + new_thread->stacksize-1);
-	SP = (unsigned long*)(((uintptr_t)SP + 15) & ~0xF);
+	SP = new_thread->stack + howbig;
 	
 	// add lwp_wrap to stack
 	SP--;
@@ -141,13 +137,8 @@ void lwp_start(void){
 	// Starts the threading system by converting the calling thread—the original system thread—into a LWP
 	// by allocating a context for it and admitting it to the scheduler, and yields control to whichever thread the
 	// scheduler indicates. It is not necessary to allocate a stack for this thread since it already has one.
-	if(currScheduler->qlen <= 0)
-	{
-		return;
-	}
-
-	thread original = (thread)malloc(sizeof(struct threadinfo_st));
-	//thread currThread  = currScheduler->next();
+	thread original;
+	original = (thread)malloc(sizeof(struct threadinfo_st));
 
 	// set tid
 	NUM_THREADS++;
@@ -167,11 +158,9 @@ void lwp_yield(void){
 	// get next thread
 	thread prevThread = currThread;
 	if((currThread = currScheduler->next()) == NULL){
-		// save status to exit with
-		int status = prevThread->status;
 		deallocateThread(prevThread);
 		// exit with status
-		exit(status);
+		exit(prevThread->status);
 	}
 	if(prevThread){
 		swap_rfiles(&(prevThread->state), &(currThread->state));	
@@ -220,6 +209,8 @@ tid_t lwp_wait(int *status){
 	// termination status. Returns the tid of the terminated thread or NO_THREAD if it would block forever
 	// because there are no more runnable threads that could terminate.
 	// Be careful not to deallocate the stack of the thread that was the original system thread
+	tid_t tid;
+	thread term, temp, terminated, temp2;
 
 	if (currScheduler->qlen() <= 1)
     {
@@ -230,7 +221,7 @@ tid_t lwp_wait(int *status){
 	if(terminatedQueue != NULL)
 	{
 		// remove head (oldest) from terminated threads queue
-		thread term = terminatedQueue;
+		term = terminatedQueue;
 		if(term != NULL)
 		{
 			terminatedQueue->lib_two->lib_one = NULL;
@@ -241,10 +232,10 @@ tid_t lwp_wait(int *status){
 		{
 			*status = term->status;
 		}
-		tid_t t = term->tid;
+		tid = term->tid;
 		// deallocate the thread and return status
-		//deallocateThread(term);
-		return t;
+		deallocateThread(term);
+		return tid;
 	}
 
 	// no terminated threads, and therefore calling thread should block
@@ -254,7 +245,7 @@ tid_t lwp_wait(int *status){
 	if(waitingQueue == NULL) {
 		waitingQueue = currThread;
 	} else {
-		thread temp = waitingQueue;
+		temp = waitingQueue;
 			while(temp->lib_two != NULL)
 			{
 				temp = temp->lib_two;
@@ -267,9 +258,9 @@ tid_t lwp_wait(int *status){
 	// move on to next thread
 	lwp_yield();
 	// retrieve exited
-	thread terminated = currThread->exited;
+	terminated = currThread->exited;
 	// remove terminated from terminated queue
-	thread temp = terminatedQueue;
+	temp = terminatedQueue;
 	if(temp != NULL){
 		if(terminated == temp){
 			terminatedQueue = temp->lib_two;
@@ -287,7 +278,7 @@ tid_t lwp_wait(int *status){
 		}
 	}
 	// remove current thread from waiting queue
-	thread temp2 = waitingQueue;
+	temp2 = waitingQueue;
 	if(currThread == temp2){
 		waitingQueue = temp2->lib_one;
 		if(waitingQueue != NULL){
@@ -309,9 +300,9 @@ tid_t lwp_wait(int *status){
             *status = terminated->status;
         }
 
-        tid_t t = terminated->tid;
+        tid= terminated->tid;
         deallocateThread(terminated);
-        return t;
+        return tid;
     }
 };
 
@@ -337,40 +328,26 @@ thread tid2thread(tid_t tid){
 }
 
 void lwp_set_scheduler(scheduler sched){
-	thread saved;
-    thread new_head;
-    scheduler new_sched = sched;
-
-    if (!new_sched)
-    {
-        if (currScheduler == &rr_publish)
-        {
-            return;
-        }
-        new_sched = &rr_publish;
+	thread head;
+	if(!sched){
+		sched = &rr_publish;
+	}
+	head = currThread;
+    if (sched->init){
+        sched->init();
     }
-
-    if (new_sched->init)
-    {
-        new_sched->init();
-    }
-
-    new_head = currThread;
-
+	// readmit all threads to new scheduler
     while ((currThread = currScheduler->next()))
     {
-        saved = currThread;
-        currScheduler->remove(saved);
-        new_sched->admit(saved);
+        currScheduler->remove(currThread);
+        sched->admit(currThread);
     }
-
-    if (currScheduler->shutdown)
-    {
+    if (currScheduler->shutdown){
         currScheduler->shutdown();
     }
-    
-    currThread = new_head;
-    currScheduler = new_sched;
+    currScheduler = sched;
+
+	currThread = head;
 };
 
 scheduler lwp_get_scheduler(void){
